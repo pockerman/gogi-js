@@ -1,3 +1,4 @@
+import type { ContentPart as ProtoPart } from '../generated/gogi/v1/llm_message'
 import { LLMModelServerClient, type LLMRunRequest, type TokenUsage } from '../generated/gogi/v1/llm_model_service'
 import { promised, streamed, type Connection } from '../connection'
 
@@ -5,12 +6,39 @@ const SERVICE = 'llms'
 
 export type Role = 'system' | 'user' | 'assistant' | 'tool'
 
+/**
+ * An image for a model: its bytes, or a document of the platform's (e.g. a photo uploaded with storeOnly), which
+ * the platform reads itself, so a large image needn't travel in the request. The media type (image/jpeg,
+ * image/png, image/gif or image/webp) is worked out from the image if it isn't given.
+ */
+export type Image =
+  | { data: Uint8Array; mediaType?: string }
+  | { indexName: string; documentId: string; mediaType?: string }
+
+/** A part of a user message's content: text or an image. */
+export type ContentPart = { text: string } | { image: Image }
+
 export type Message = {
   role: Role
   content: string
+  /** a user message's text and images, in order, after its content */
+  parts?: ContentPart[]
   /** for a tool message: the call it answers */
   toolCallId?: string
   name?: string
+}
+
+/** A user message asking about images, e.g. "What defects do you see?" and a photo. */
+export function userWithImages(content: string, images: Image[]): Message {
+  return { role: 'user', content, parts: images.map((image) => ({ image })) }
+}
+
+function toPart(part: ContentPart): ProtoPart {
+  if ('text' in part) return { text: part.text }
+  const image = part.image
+  const mediaType = image.mediaType ?? ''
+  if ('data' in image) return { image: { data: Buffer.from(image.data), mediaType } }
+  return { image: { document: { indexName: image.indexName, documentId: image.documentId }, mediaType } }
 }
 
 /** Asks for an answer that is a JSON object: any object, or one matching a JSON schema. */
@@ -80,6 +108,7 @@ function toProto(request: RunRequest): LLMRunRequest {
       toolCallId: message.toolCallId,
       name: message.name,
       timestamp: 0,
+      parts: (message.parts ?? []).map(toPart),
     })),
     tools: [],
     responseFormat: format && {

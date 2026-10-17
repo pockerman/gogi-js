@@ -1,6 +1,6 @@
 import { status, type ServerWritableStream } from '@grpc/grpc-js'
 import { afterEach, describe, expect, it } from 'vitest'
-import { GogiError } from '../src'
+import { GogiError, userWithImages } from '../src'
 import { LLMModelServerService, type LLMRunRequest } from '../src/generated/gogi/v1/llm_model_service'
 import { FakeGateway, fail } from './server'
 
@@ -90,5 +90,39 @@ describe('models', () => {
 
     expect(error).toBeInstanceOf(GogiError)
     expect(error).toMatchObject({ code: 'INVALID_ARGUMENT', details: 'unknown provider' })
+  })
+})
+
+describe('images', () => {
+  let gateway: FakeGateway
+  afterEach(() => gateway?.stop())
+
+  it('sends images with a message: their bytes, or a document of the platform', async () => {
+    let request: LLMRunRequest | undefined
+    gateway = new FakeGateway().add(LLMModelServerService, {
+      run: (call: { request: LLMRunRequest }, callback: (...a: unknown[]) => void) => {
+        request = call.request
+        callback(null, { content: 'Corrosion.', model: 'm', provider: 'p', usage, toolCalls: [], finishReason: 'stop' })
+      },
+    })
+    const gogi = await gateway.start()
+    const photo = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+
+    await gogi.models.run({
+      provider: 'ollama',
+      model: 'moondream:latest',
+      messages: [
+        userWithImages('What defects do you see?', [
+          { data: photo, mediaType: 'image/png' },
+          { indexName: 'elena--surveys', documentId: 'hull-port-bow' },
+        ]),
+      ],
+    })
+
+    const message = request!.messages[0]
+    expect(message.content).toBe('What defects do you see?')
+    expect(message.parts[0].image?.data?.equals(photo)).toBe(true)
+    expect(message.parts[0].image?.mediaType).toBe('image/png')
+    expect(message.parts[1].image?.document).toEqual({ indexName: 'elena--surveys', documentId: 'hull-port-bow' })
   })
 })

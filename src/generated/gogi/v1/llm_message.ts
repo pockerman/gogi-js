@@ -10,6 +10,31 @@ import { ToolCall } from "./llm_tool";
 
 export const protobufPackage = "gogi.v1";
 
+/** A document of the platform's, e.g. a photo uploaded with store_only */
+export interface DocumentReference {
+  indexName: string;
+  documentId: string;
+}
+
+/**
+ * An image in a message: its bytes, or a document of the platform's, which the model service reads
+ * from the documents service, so a large image need not travel in the request
+ */
+export interface ImageContent {
+  data?: Buffer | undefined;
+  document?:
+    | DocumentReference
+    | undefined;
+  /** image/jpeg, image/png, image/gif or image/webp; worked out from the image if empty */
+  mediaType: string;
+}
+
+/** A part of a message's content: text or an image */
+export interface ContentPart {
+  text?: string | undefined;
+  image?: ImageContent | undefined;
+}
+
 /** A message sent to an LLM */
 export interface LLMMessage {
   role: string;
@@ -18,10 +43,307 @@ export interface LLMMessage {
   toolCallId?: string | undefined;
   name?: string | undefined;
   timestamp: number;
+  /** a user message's content as text and images, in order; content, if set, comes first */
+  parts: ContentPart[];
 }
 
+function createBaseDocumentReference(): DocumentReference {
+  return { indexName: "", documentId: "" };
+}
+
+export const DocumentReference: MessageFns<DocumentReference> = {
+  encode(message: DocumentReference, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.indexName !== "") {
+      writer.uint32(10).string(message.indexName);
+    }
+    if (message.documentId !== "") {
+      writer.uint32(18).string(message.documentId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): DocumentReference {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseDocumentReference();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.indexName = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.documentId = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): DocumentReference {
+    return {
+      indexName: isSet(object.indexName)
+        ? globalThis.String(object.indexName)
+        : isSet(object.index_name)
+        ? globalThis.String(object.index_name)
+        : "",
+      documentId: isSet(object.documentId)
+        ? globalThis.String(object.documentId)
+        : isSet(object.document_id)
+        ? globalThis.String(object.document_id)
+        : "",
+    };
+  },
+
+  toJSON(message: DocumentReference): unknown {
+    const obj: any = {};
+    if (message.indexName !== "") {
+      obj.indexName = message.indexName;
+    }
+    if (message.documentId !== "") {
+      obj.documentId = message.documentId;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<DocumentReference>): DocumentReference {
+    return DocumentReference.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<DocumentReference>): DocumentReference {
+    const message = createBaseDocumentReference();
+    message.indexName = object.indexName ?? "";
+    message.documentId = object.documentId ?? "";
+    return message;
+  },
+};
+
+function createBaseImageContent(): ImageContent {
+  return { data: undefined, document: undefined, mediaType: "" };
+}
+
+export const ImageContent: MessageFns<ImageContent> = {
+  encode(message: ImageContent, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.data !== undefined) {
+      writer.uint32(10).bytes(message.data);
+    }
+    if (message.document !== undefined) {
+      DocumentReference.encode(message.document, writer.uint32(18).fork()).join();
+    }
+    if (message.mediaType !== "") {
+      writer.uint32(26).string(message.mediaType);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ImageContent {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseImageContent();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.data = Buffer.from(reader.bytes());
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.document = DocumentReference.decode(reader, reader.uint32());
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.mediaType = reader.string();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ImageContent {
+    return {
+      data: isSet(object.data) ? Buffer.from(bytesFromBase64(object.data)) : undefined,
+      document: isSet(object.document) ? DocumentReference.fromJSON(object.document) : undefined,
+      mediaType: isSet(object.mediaType)
+        ? globalThis.String(object.mediaType)
+        : isSet(object.media_type)
+        ? globalThis.String(object.media_type)
+        : "",
+    };
+  },
+
+  toJSON(message: ImageContent): unknown {
+    const obj: any = {};
+    if (message.data !== undefined) {
+      obj.data = base64FromBytes(message.data);
+    }
+    if (message.document !== undefined) {
+      obj.document = DocumentReference.toJSON(message.document);
+    }
+    if (message.mediaType !== "") {
+      obj.mediaType = message.mediaType;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ImageContent>): ImageContent {
+    return ImageContent.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ImageContent>): ImageContent {
+    const message = createBaseImageContent();
+    message.data = object.data ?? undefined;
+    message.document = (object.document !== undefined && object.document !== null)
+      ? DocumentReference.fromPartial(object.document)
+      : undefined;
+    message.mediaType = object.mediaType ?? "";
+    return message;
+  },
+};
+
+function createBaseContentPart(): ContentPart {
+  return { text: undefined, image: undefined };
+}
+
+export const ContentPart: MessageFns<ContentPart> = {
+  encode(message: ContentPart, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.text !== undefined) {
+      writer.uint32(10).string(message.text);
+    }
+    if (message.image !== undefined) {
+      ImageContent.encode(message.image, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ContentPart {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseContentPart();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.text = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.image = ImageContent.decode(reader, reader.uint32());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ContentPart {
+    return {
+      text: isSet(object.text) ? globalThis.String(object.text) : undefined,
+      image: isSet(object.image) ? ImageContent.fromJSON(object.image) : undefined,
+    };
+  },
+
+  toJSON(message: ContentPart): unknown {
+    const obj: any = {};
+    if (message.text !== undefined) {
+      obj.text = message.text;
+    }
+    if (message.image !== undefined) {
+      obj.image = ImageContent.toJSON(message.image);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ContentPart>): ContentPart {
+    return ContentPart.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ContentPart>): ContentPart {
+    const message = createBaseContentPart();
+    message.text = object.text ?? undefined;
+    message.image = (object.image !== undefined && object.image !== null)
+      ? ImageContent.fromPartial(object.image)
+      : undefined;
+    return message;
+  },
+};
+
 function createBaseLLMMessage(): LLMMessage {
-  return { role: "", content: undefined, toolCalls: [], toolCallId: undefined, name: undefined, timestamp: 0 };
+  return {
+    role: "",
+    content: undefined,
+    toolCalls: [],
+    toolCallId: undefined,
+    name: undefined,
+    timestamp: 0,
+    parts: [],
+  };
 }
 
 export const LLMMessage: MessageFns<LLMMessage> = {
@@ -43,6 +365,9 @@ export const LLMMessage: MessageFns<LLMMessage> = {
     }
     if (message.timestamp !== 0) {
       writer.uint32(48).int64(message.timestamp);
+    }
+    for (const v of message.parts) {
+      ContentPart.encode(v!, writer.uint32(58).fork()).join();
     }
     return writer;
   },
@@ -108,6 +433,14 @@ export const LLMMessage: MessageFns<LLMMessage> = {
             message.timestamp = longToNumber(reader.int64());
             continue;
           }
+          case 7: {
+            if (tag !== 58) {
+              break;
+            }
+
+            message.parts.push(ContentPart.decode(reader, reader.uint32()));
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -136,6 +469,7 @@ export const LLMMessage: MessageFns<LLMMessage> = {
         : undefined,
       name: isSet(object.name) ? globalThis.String(object.name) : undefined,
       timestamp: isSet(object.timestamp) ? globalThis.Number(object.timestamp) : 0,
+      parts: globalThis.Array.isArray(object?.parts) ? object.parts.map((e: any) => ContentPart.fromJSON(e)) : [],
     };
   },
 
@@ -159,6 +493,9 @@ export const LLMMessage: MessageFns<LLMMessage> = {
     if (message.timestamp !== 0) {
       obj.timestamp = Math.round(message.timestamp);
     }
+    if (message.parts?.length) {
+      obj.parts = message.parts.map((e) => ContentPart.toJSON(e));
+    }
     return obj;
   },
 
@@ -173,9 +510,18 @@ export const LLMMessage: MessageFns<LLMMessage> = {
     message.toolCallId = object.toolCallId ?? undefined;
     message.name = object.name ?? undefined;
     message.timestamp = object.timestamp ?? 0;
+    message.parts = object.parts?.map((e) => ContentPart.fromPartial(e)) || [];
     return message;
   },
 };
+
+function bytesFromBase64(b64: string): Uint8Array {
+  return Uint8Array.from(globalThis.Buffer.from(b64, "base64"));
+}
+
+function base64FromBytes(arr: Uint8Array): string {
+  return globalThis.Buffer.from(arr).toString("base64");
+}
 
 type Builtin = Date | Function | Uint8Array | string | number | boolean | undefined;
 

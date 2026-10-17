@@ -14,7 +14,10 @@ export {
   type SearchRequest,
   type SectionText,
 } from './clients/documents'
+export { userWithImages } from './clients/models'
 export type {
+  ContentPart,
+  Image,
   Message,
   ResponseFormat,
   Role,
