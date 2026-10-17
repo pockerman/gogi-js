@@ -1,5 +1,3 @@
 node_modules/
 dist/
-# generated from vendor/protos/gogi by npm run build:protos
-src/generated/
 *.tsbuildinfo

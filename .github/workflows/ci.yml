@@ -21,6 +21,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # the generated clients are committed, so installing from git needs neither protoc nor the submodule
+      - name: generated code matches the protos
+        run: npm run build:protos && git diff --exit-code -- src/generated
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test

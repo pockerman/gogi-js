@@ -12,7 +12,7 @@
   },
   "scripts": {
     "build:protos": "node scripts/build-protos.mjs",
-    "build": "npm run build:protos && tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json",
     "prepare": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",

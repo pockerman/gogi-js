@@ -10,7 +10,7 @@ a promise-based API, retries while the platform is briefly unavailable, and erro
 npm install github:pockerman/gogi-js
 ```
 
-Building needs `protoc` on the `PATH`: the clients are generated from the protos when the package is built.
+The generated gRPC clients are committed, so installing needs neither `protoc` nor the protos.
 
 ## Use
 
@@ -82,9 +82,10 @@ try {
 
 ```bash
 git submodule update --init   # the protos, in vendor/protos/gogi
-npm install                   # builds too, generating src/generated
+npm install                   # builds too
 npm test                      # against an in-process fake gateway
 npm run typecheck && npm run lint
 ```
 
-To pick up proto changes, move the submodule to the gogi-protos commit you need and run `npm run build`.
+To pick up proto changes, move the submodule to the gogi-protos commit you need, run `npm run build:protos` (it
+needs `protoc`) and commit `src/generated` with the submodule.
