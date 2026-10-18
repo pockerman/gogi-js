@@ -1,6 +1,7 @@
 export { Gogi } from './gogi'
 export type { GogiOptions } from './connection'
 export { GogiError } from './errors'
+export { ANTHROPIC, OPENAI, type Credential } from './clients/credentials'
 export { GATEWAY, PLATFORM_SERVICES, type PlatformHealth, type ServingStatus } from './clients/health'
 export type { GogiIndex, MemberRole } from './clients/indexes'
 export {

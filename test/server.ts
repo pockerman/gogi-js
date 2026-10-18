@@ -23,7 +23,7 @@ export class FakeGateway {
     return this
   }
 
-  async start(options: { maxAttempts?: number } = {}): Promise<Gogi> {
+  async start(options: { maxAttempts?: number; apiKey?: string } = {}): Promise<Gogi> {
     const port = await new Promise<number>((resolve, reject) =>
       this.server.bindAsync('127.0.0.1:0', ServerCredentials.createInsecure(), (error, port) =>
         error ? reject(error) : resolve(port),

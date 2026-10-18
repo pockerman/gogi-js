@@ -7,6 +7,7 @@ import {
   type ClientReadableStream,
   type ServiceError,
 } from '@grpc/grpc-js'
+import { readFileSync } from 'node:fs'
 import { GogiError } from './errors'
 
 /** How the SDK reaches the platform's gateway. */
@@ -15,6 +16,16 @@ export type GogiOptions = {
   gatewayUrl?: string
   /** plaintext gRPC; defaults to true for localhost and when GOGI_GATEWAY_INSECURE=1, else TLS */
   insecure?: boolean
+  /**
+   * the key gogi gave the application, sent with every call; defaults to GOGI_API_KEY. Not needed where gogi
+   * runs without keys
+   */
+  apiKey?: string
+  /**
+   * PEM certificates to check the gateway's certificate against instead of the system's, e.g. the certificate
+   * authority of a deployment without a domain; defaults to the file GOGI_GATEWAY_CA_FILE
+   */
+  rootCertificates?: Buffer
   /** how long a call may take before it fails with DEADLINE_EXCEEDED; none by default */
   timeoutMs?: number
   /** how many times a call is tried when the platform is briefly unavailable */
@@ -35,20 +46,28 @@ export class Connection {
   readonly credentials: ChannelCredentials
   private readonly timeoutMs?: number
   private readonly maxAttempts: number
+  private readonly apiKey?: string
 
   constructor(options: GogiOptions = {}) {
     this.gatewayUrl = options.gatewayUrl ?? process.env.GOGI_GATEWAY_URL ?? 'localhost:50051'
     const local = /^(localhost|127\.0\.0\.1)(:|$)/.test(this.gatewayUrl)
     const insecure = options.insecure ?? (local || process.env.GOGI_GATEWAY_INSECURE === '1')
-    this.credentials = insecure ? credentials.createInsecure() : credentials.createSsl()
+    const caFile = process.env.GOGI_GATEWAY_CA_FILE
+    const rootCertificates = options.rootCertificates ?? (caFile ? readFileSync(caFile) : undefined)
+    this.credentials = insecure ? credentials.createInsecure() : credentials.createSsl(rootCertificates)
+    this.apiKey = options.apiKey || process.env.GOGI_API_KEY || undefined
     this.timeoutMs = options.timeoutMs
     this.maxAttempts = Math.max(1, options.maxAttempts ?? 3)
   }
 
-  /** The metadata that routes a call through the gateway to a service, e.g. "documents". */
+  /**
+   * The metadata that routes a call through the gateway to a service, e.g. "documents", and says which
+   * application it is for, with the application's key.
+   */
   metadata(service: string): Metadata {
     const metadata = new Metadata()
     metadata.set('x-target-service', service)
+    if (this.apiKey) metadata.set('authorization', `Bearer ${this.apiKey}`)
     return metadata
   }
 

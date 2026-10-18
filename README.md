@@ -68,6 +68,7 @@ try {
 | `gogi.indexes` | Indexes and their members (owners and readers) |
 | `gogi.documents` | Ingesting (streamed, so large files work), listing by metadata, sections, download (whole or a byte range), search, delete |
 | `gogi.models` | Running a model, streaming its answer, JSON answers matching a schema |
+| `gogi.credentials` | The application's own credentials, e.g. its model providers' keys; never their values |
 
 ### Options
 
@@ -75,8 +76,23 @@ try {
 |---|---|
 | `gatewayUrl` | `GOGI_GATEWAY_URL`, then `localhost:50051` |
 | `insecure` | plaintext for `localhost` and when `GOGI_GATEWAY_INSECURE=1`, else TLS |
+| `apiKey` | `GOGI_API_KEY`; the key gogi gave the application, sent with every call. Not needed where gogi runs without keys |
+| `rootCertificates` | the file `GOGI_GATEWAY_CA_FILE`, else the system's certificates; e.g. the CA of a deployment without a domain |
 | `timeoutMs` | none |
 | `maxAttempts` | 3, for calls failing with `UNAVAILABLE`, `DEADLINE_EXCEEDED` or `RESOURCE_EXHAUSTED` |
+
+### Applications and keys
+
+Where one gogi serves many applications, every call carries the key gogi gave the application, and what the
+application makes is its own. Its calls to Anthropic or OpenAI are made with its own key, stored as a credential named
+after the provider:
+
+```ts
+const gogi = new Gogi({ gatewayUrl: 'gogi.example.org:443', apiKey: process.env.GOGI_API_KEY })
+await gogi.credentials.store('anthropic', process.env.ANTHROPIC_API_KEY!)
+```
+
+See gogi's [applications](https://github.com/pockerman/gogi/blob/main/docs/applications.md).
 
 ## Develop
 
