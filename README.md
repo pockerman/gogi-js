@@ -22,7 +22,9 @@ const gogi = new Gogi({ gatewayUrl: 'localhost:50051' })
 // the platform's health
 const health = await gogi.health.status()
 
-// an index, and a document ingested into it
+// an index, and a document ingested into it with the embedding models named: each embeds it into a
+// collection of its own; with no models the document is only stored, and gogi.documents.ingestStored
+// ingests it later
 await gogi.indexes.create('elena--surveys', 'elena')
 const job = await gogi.documents.ingest({
   indexName: 'elena--surveys',
@@ -30,20 +32,22 @@ const job = await gogi.documents.ingest({
   content: await fs.readFile('hull-guidance.md'),
   contentType: 'text/markdown',
   metadata: { topic: 'hull' },
-  chunkStrategy: 'fixed',
-  embeddingsModel: 'clip',
-  embeddingsClient: 'sentence-transformer',
+  embeddingModels: ['bge-small-en-v1.5'],
 })
 await gogi.documents.waitForIngestion(job.jobId)
 
-// read it by section, search it, download it
+// read it by section, search it with one of the models it was ingested with, download it
 const sections = await gogi.documents.listSections('elena--surveys', job.documentId)
 const chunks = await gogi.documents.search({
   indexName: 'elena--surveys',
   query: 'corrosion limits',
-  embeddingsModel: 'clip',
-  embeddingsClient: 'sentence-transformer',
+  embeddingModel: 'bge-small-en-v1.5',
 })
+
+// the embedding models: gogi's own two, OpenAI's (with the application's 'openai' credential), and a model
+// the application hosts behind an OpenAI-compatible endpoint, registered by its URL
+const models = await gogi.embeddings.list()
+await gogi.embeddings.register({ name: 'nomic', url: 'https://models.example.org/v1', servedName: 'nomic-embed-text' })
 
 // run a model, or stream its answer, or ask for JSON
 const answer = await gogi.models.run({
@@ -68,6 +72,7 @@ try {
 | `gogi.indexes` | Indexes and their members (owners and readers) |
 | `gogi.documents` | Ingesting (streamed, so large files work), listing by metadata, sections, download (whole or a byte range), search, delete |
 | `gogi.models` | Running a model, streaming its answer, JSON answers matching a schema |
+| `gogi.credentials` | The application's own credentials, e.g. its model providers' keys; never their values |
 
 ### Options
 
@@ -75,8 +80,23 @@ try {
 |---|---|
 | `gatewayUrl` | `GOGI_GATEWAY_URL`, then `localhost:50051` |
 | `insecure` | plaintext for `localhost` and when `GOGI_GATEWAY_INSECURE=1`, else TLS |
+| `apiKey` | `GOGI_API_KEY`; the key gogi gave the application, sent with every call. Not needed where gogi runs without keys |
+| `rootCertificates` | the file `GOGI_GATEWAY_CA_FILE`, else the system's certificates; e.g. the CA of a deployment without a domain |
 | `timeoutMs` | none |
 | `maxAttempts` | 3, for calls failing with `UNAVAILABLE`, `DEADLINE_EXCEEDED` or `RESOURCE_EXHAUSTED` |
+
+### Applications and keys
+
+Where one gogi serves many applications, every call carries the key gogi gave the application, and what the
+application makes is its own. Its calls to Anthropic or OpenAI are made with its own key, stored as a credential named
+after the provider:
+
+```ts
+const gogi = new Gogi({ gatewayUrl: 'gogi.example.org:443', apiKey: process.env.GOGI_API_KEY })
+await gogi.credentials.store('anthropic', process.env.ANTHROPIC_API_KEY!)
+```
+
+See gogi's [applications](https://github.com/pockerman/gogi/blob/main/docs/applications.md).
 
 ## Develop
 

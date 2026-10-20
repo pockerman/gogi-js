@@ -1,4 +1,6 @@
+import { CredentialsClient } from './clients/credentials'
 import { DocumentsClient } from './clients/documents'
+import { EmbeddingsClient } from './clients/embeddings'
 import { HealthClient } from './clients/health'
 import { IndexesClient } from './clients/indexes'
 import { ModelsClient } from './clients/models'
@@ -9,6 +11,10 @@ import { Connection, type GogiOptions } from './connection'
  *
  *   const gogi = new Gogi({ gatewayUrl: 'localhost:50051' })
  *   const health = await gogi.health.status()
+ *
+ * Where gogi serves many applications, every call carries the key gogi gave the application:
+ *
+ *   const gogi = new Gogi({ gatewayUrl: 'gogi.example.org:443', apiKey: 'gogi_...' })
  */
 export class Gogi {
   readonly connection: Connection
@@ -30,8 +36,18 @@ export class Gogi {
     return this.client('documents', () => new DocumentsClient(this.connection))
   }
 
+  /** The embedding models documents are ingested and searched with, and the application's own. */
+  get embeddings(): EmbeddingsClient {
+    return this.client('embeddings', () => new EmbeddingsClient(this.connection))
+  }
+
   get models(): ModelsClient {
     return this.client('models', () => new ModelsClient(this.connection))
+  }
+
+  /** The application's own credentials, e.g. its model providers' keys. */
+  get credentials(): CredentialsClient {
+    return this.client('credentials', () => new CredentialsClient(this.connection))
   }
 
   private client<T>(name: string, create: () => T): T {

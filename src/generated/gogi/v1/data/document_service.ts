@@ -42,6 +42,8 @@ export interface DocumentMetadata {
   createdAt: string;
   /** the size of the uploaded file */
   sizeBytes: number;
+  /** the models the document is embedded by; none if it is only stored */
+  embeddingModels: string[];
 }
 
 export interface DocumentMetadata_MetadataEntry {
@@ -92,22 +94,37 @@ export interface IngestDocumentRequest {
   metadata: { [key: string]: string };
   documentId: string;
   chunkStrategy: string;
-  embeddingsModel: string;
-  embeddingsClient: string;
   batchSize: number;
-  /** keep and register the file without ingesting it, e.g. a video: it gets no chunks or sections */
-  storeOnly: boolean;
   /**
    * replace the content of the existing document of document_id, e.g. after it was edited: its old
    * chunks and sections are deleted, any ingestion of the old content is stopped, and the new
-   * content is ingested
+   * content is stored, and ingested if models are named
    */
   replace: boolean;
+  /**
+   * the models that embed the document's chunks, each into a collection of the index's of its
+   * own, e.g. "bge-small-en-v1.5"; with none the document is only stored, e.g. a video
+   */
+  embeddingModels: string[];
 }
 
 export interface IngestDocumentRequest_MetadataEntry {
   key: string;
   value: string;
+}
+
+/**
+ * IngestStoredDocument chunks a document already stored in an index and embeds it with the models
+ * named, e.g. one stored without models, or one embedded before by other models. What a model
+ * embedded of the document before is replaced; what other models embedded is kept
+ */
+export interface IngestStoredDocumentRequest {
+  indexName: string;
+  documentId: string;
+  /** one or more */
+  embeddingModels: string[];
+  chunkStrategy: string;
+  batchSize: number;
 }
 
 /**
@@ -202,10 +219,10 @@ export interface SearchDocumentsRequest {
   indexName: string;
   query: string;
   topK: number;
-  embeddingsModel: string;
-  embeddingsClient: string;
   documentIds: string[];
   metadataFilter: { [key: string]: string };
+  /** the model whose embeddings are searched: only documents it embedded are found */
+  embeddingModel: string;
 }
 
 export interface SearchDocumentsRequest_MetadataFilterEntry {
@@ -245,6 +262,7 @@ function createBaseDocumentMetadata(): DocumentMetadata {
     jobId: "",
     createdAt: "",
     sizeBytes: 0,
+    embeddingModels: [],
   };
 }
 
@@ -285,6 +303,9 @@ export const DocumentMetadata: MessageFns<DocumentMetadata> = {
     }
     if (message.sizeBytes !== 0) {
       writer.uint32(96).int64(message.sizeBytes);
+    }
+    for (const v of message.embeddingModels) {
+      writer.uint32(106).string(v!);
     }
     return writer;
   },
@@ -401,6 +422,14 @@ export const DocumentMetadata: MessageFns<DocumentMetadata> = {
             message.sizeBytes = longToNumber(reader.int64());
             continue;
           }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.embeddingModels.push(reader.string());
+            continue;
+          }
         }
         if ((tag & 7) === 4 || tag === 0) {
           break;
@@ -476,6 +505,11 @@ export const DocumentMetadata: MessageFns<DocumentMetadata> = {
         : isSet(object.size_bytes)
         ? globalThis.Number(object.size_bytes)
         : 0,
+      embeddingModels: globalThis.Array.isArray(object?.embeddingModels)
+        ? object.embeddingModels.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.embedding_models)
+        ? object.embedding_models.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -523,6 +557,9 @@ export const DocumentMetadata: MessageFns<DocumentMetadata> = {
     if (message.sizeBytes !== 0) {
       obj.sizeBytes = Math.round(message.sizeBytes);
     }
+    if (message.embeddingModels?.length) {
+      obj.embeddingModels = message.embeddingModels;
+    }
     return obj;
   },
 
@@ -551,6 +588,7 @@ export const DocumentMetadata: MessageFns<DocumentMetadata> = {
     message.jobId = object.jobId ?? "";
     message.createdAt = object.createdAt ?? "";
     message.sizeBytes = object.sizeBytes ?? 0;
+    message.embeddingModels = object.embeddingModels?.map((e) => e) || [];
     return message;
   },
 };
@@ -1281,11 +1319,9 @@ function createBaseIngestDocumentRequest(): IngestDocumentRequest {
     metadata: {},
     documentId: "",
     chunkStrategy: "",
-    embeddingsModel: "",
-    embeddingsClient: "",
     batchSize: 0,
-    storeOnly: false,
     replace: false,
+    embeddingModels: [],
   };
 }
 
@@ -1312,20 +1348,14 @@ export const IngestDocumentRequest: MessageFns<IngestDocumentRequest> = {
     if (message.chunkStrategy !== "") {
       writer.uint32(58).string(message.chunkStrategy);
     }
-    if (message.embeddingsModel !== "") {
-      writer.uint32(66).string(message.embeddingsModel);
-    }
-    if (message.embeddingsClient !== "") {
-      writer.uint32(74).string(message.embeddingsClient);
-    }
     if (message.batchSize !== 0) {
       writer.uint32(80).int32(message.batchSize);
     }
-    if (message.storeOnly !== false) {
-      writer.uint32(88).bool(message.storeOnly);
-    }
     if (message.replace !== false) {
       writer.uint32(96).bool(message.replace);
+    }
+    for (const v of message.embeddingModels) {
+      writer.uint32(106).string(v!);
     }
     return writer;
   },
@@ -1402,22 +1432,6 @@ export const IngestDocumentRequest: MessageFns<IngestDocumentRequest> = {
             message.chunkStrategy = reader.string();
             continue;
           }
-          case 8: {
-            if (tag !== 66) {
-              break;
-            }
-
-            message.embeddingsModel = reader.string();
-            continue;
-          }
-          case 9: {
-            if (tag !== 74) {
-              break;
-            }
-
-            message.embeddingsClient = reader.string();
-            continue;
-          }
           case 10: {
             if (tag !== 80) {
               break;
@@ -1426,20 +1440,20 @@ export const IngestDocumentRequest: MessageFns<IngestDocumentRequest> = {
             message.batchSize = reader.int32();
             continue;
           }
-          case 11: {
-            if (tag !== 88) {
-              break;
-            }
-
-            message.storeOnly = reader.bool();
-            continue;
-          }
           case 12: {
             if (tag !== 96) {
               break;
             }
 
             message.replace = reader.bool();
+            continue;
+          }
+          case 13: {
+            if (tag !== 106) {
+              break;
+            }
+
+            message.embeddingModels.push(reader.string());
             continue;
           }
         }
@@ -1492,27 +1506,17 @@ export const IngestDocumentRequest: MessageFns<IngestDocumentRequest> = {
         : isSet(object.chunk_strategy)
         ? globalThis.String(object.chunk_strategy)
         : "",
-      embeddingsModel: isSet(object.embeddingsModel)
-        ? globalThis.String(object.embeddingsModel)
-        : isSet(object.embeddings_model)
-        ? globalThis.String(object.embeddings_model)
-        : "",
-      embeddingsClient: isSet(object.embeddingsClient)
-        ? globalThis.String(object.embeddingsClient)
-        : isSet(object.embeddings_client)
-        ? globalThis.String(object.embeddings_client)
-        : "",
       batchSize: isSet(object.batchSize)
         ? globalThis.Number(object.batchSize)
         : isSet(object.batch_size)
         ? globalThis.Number(object.batch_size)
         : 0,
-      storeOnly: isSet(object.storeOnly)
-        ? globalThis.Boolean(object.storeOnly)
-        : isSet(object.store_only)
-        ? globalThis.Boolean(object.store_only)
-        : false,
       replace: isSet(object.replace) ? globalThis.Boolean(object.replace) : false,
+      embeddingModels: globalThis.Array.isArray(object?.embeddingModels)
+        ? object.embeddingModels.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.embedding_models)
+        ? object.embedding_models.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -1545,20 +1549,14 @@ export const IngestDocumentRequest: MessageFns<IngestDocumentRequest> = {
     if (message.chunkStrategy !== "") {
       obj.chunkStrategy = message.chunkStrategy;
     }
-    if (message.embeddingsModel !== "") {
-      obj.embeddingsModel = message.embeddingsModel;
-    }
-    if (message.embeddingsClient !== "") {
-      obj.embeddingsClient = message.embeddingsClient;
-    }
     if (message.batchSize !== 0) {
       obj.batchSize = Math.round(message.batchSize);
     }
-    if (message.storeOnly !== false) {
-      obj.storeOnly = message.storeOnly;
-    }
     if (message.replace !== false) {
       obj.replace = message.replace;
+    }
+    if (message.embeddingModels?.length) {
+      obj.embeddingModels = message.embeddingModels;
     }
     return obj;
   },
@@ -1583,11 +1581,9 @@ export const IngestDocumentRequest: MessageFns<IngestDocumentRequest> = {
     );
     message.documentId = object.documentId ?? "";
     message.chunkStrategy = object.chunkStrategy ?? "";
-    message.embeddingsModel = object.embeddingsModel ?? "";
-    message.embeddingsClient = object.embeddingsClient ?? "";
     message.batchSize = object.batchSize ?? 0;
-    message.storeOnly = object.storeOnly ?? false;
     message.replace = object.replace ?? false;
+    message.embeddingModels = object.embeddingModels?.map((e) => e) || [];
     return message;
   },
 };
@@ -1673,6 +1669,159 @@ export const IngestDocumentRequest_MetadataEntry: MessageFns<IngestDocumentReque
     const message = createBaseIngestDocumentRequest_MetadataEntry();
     message.key = object.key ?? "";
     message.value = object.value ?? "";
+    return message;
+  },
+};
+
+function createBaseIngestStoredDocumentRequest(): IngestStoredDocumentRequest {
+  return { indexName: "", documentId: "", embeddingModels: [], chunkStrategy: "", batchSize: 0 };
+}
+
+export const IngestStoredDocumentRequest: MessageFns<IngestStoredDocumentRequest> = {
+  encode(message: IngestStoredDocumentRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.indexName !== "") {
+      writer.uint32(10).string(message.indexName);
+    }
+    if (message.documentId !== "") {
+      writer.uint32(18).string(message.documentId);
+    }
+    for (const v of message.embeddingModels) {
+      writer.uint32(26).string(v!);
+    }
+    if (message.chunkStrategy !== "") {
+      writer.uint32(34).string(message.chunkStrategy);
+    }
+    if (message.batchSize !== 0) {
+      writer.uint32(40).int32(message.batchSize);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): IngestStoredDocumentRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseIngestStoredDocumentRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.indexName = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.documentId = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.embeddingModels.push(reader.string());
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.chunkStrategy = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.batchSize = reader.int32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): IngestStoredDocumentRequest {
+    return {
+      indexName: isSet(object.indexName)
+        ? globalThis.String(object.indexName)
+        : isSet(object.index_name)
+        ? globalThis.String(object.index_name)
+        : "",
+      documentId: isSet(object.documentId)
+        ? globalThis.String(object.documentId)
+        : isSet(object.document_id)
+        ? globalThis.String(object.document_id)
+        : "",
+      embeddingModels: globalThis.Array.isArray(object?.embeddingModels)
+        ? object.embeddingModels.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.embedding_models)
+        ? object.embedding_models.map((e: any) => globalThis.String(e))
+        : [],
+      chunkStrategy: isSet(object.chunkStrategy)
+        ? globalThis.String(object.chunkStrategy)
+        : isSet(object.chunk_strategy)
+        ? globalThis.String(object.chunk_strategy)
+        : "",
+      batchSize: isSet(object.batchSize)
+        ? globalThis.Number(object.batchSize)
+        : isSet(object.batch_size)
+        ? globalThis.Number(object.batch_size)
+        : 0,
+    };
+  },
+
+  toJSON(message: IngestStoredDocumentRequest): unknown {
+    const obj: any = {};
+    if (message.indexName !== "") {
+      obj.indexName = message.indexName;
+    }
+    if (message.documentId !== "") {
+      obj.documentId = message.documentId;
+    }
+    if (message.embeddingModels?.length) {
+      obj.embeddingModels = message.embeddingModels;
+    }
+    if (message.chunkStrategy !== "") {
+      obj.chunkStrategy = message.chunkStrategy;
+    }
+    if (message.batchSize !== 0) {
+      obj.batchSize = Math.round(message.batchSize);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<IngestStoredDocumentRequest>): IngestStoredDocumentRequest {
+    return IngestStoredDocumentRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<IngestStoredDocumentRequest>): IngestStoredDocumentRequest {
+    const message = createBaseIngestStoredDocumentRequest();
+    message.indexName = object.indexName ?? "";
+    message.documentId = object.documentId ?? "";
+    message.embeddingModels = object.embeddingModels?.map((e) => e) || [];
+    message.chunkStrategy = object.chunkStrategy ?? "";
+    message.batchSize = object.batchSize ?? 0;
     return message;
   },
 };
@@ -2823,15 +2972,7 @@ export const DownloadDocumentResponse: MessageFns<DownloadDocumentResponse> = {
 };
 
 function createBaseSearchDocumentsRequest(): SearchDocumentsRequest {
-  return {
-    indexName: "",
-    query: "",
-    topK: 0,
-    embeddingsModel: "",
-    embeddingsClient: "",
-    documentIds: [],
-    metadataFilter: {},
-  };
+  return { indexName: "", query: "", topK: 0, documentIds: [], metadataFilter: {}, embeddingModel: "" };
 }
 
 export const SearchDocumentsRequest: MessageFns<SearchDocumentsRequest> = {
@@ -2845,18 +2986,15 @@ export const SearchDocumentsRequest: MessageFns<SearchDocumentsRequest> = {
     if (message.topK !== 0) {
       writer.uint32(24).int32(message.topK);
     }
-    if (message.embeddingsModel !== "") {
-      writer.uint32(34).string(message.embeddingsModel);
-    }
-    if (message.embeddingsClient !== "") {
-      writer.uint32(42).string(message.embeddingsClient);
-    }
     for (const v of message.documentIds) {
       writer.uint32(50).string(v!);
     }
     globalThis.Object.entries(message.metadataFilter).forEach(([key, value]: [string, string]) => {
       SearchDocumentsRequest_MetadataFilterEntry.encode({ key: key as any, value }, writer.uint32(58).fork()).join();
     });
+    if (message.embeddingModel !== "") {
+      writer.uint32(66).string(message.embeddingModel);
+    }
     return writer;
   },
 
@@ -2897,22 +3035,6 @@ export const SearchDocumentsRequest: MessageFns<SearchDocumentsRequest> = {
             message.topK = reader.int32();
             continue;
           }
-          case 4: {
-            if (tag !== 34) {
-              break;
-            }
-
-            message.embeddingsModel = reader.string();
-            continue;
-          }
-          case 5: {
-            if (tag !== 42) {
-              break;
-            }
-
-            message.embeddingsClient = reader.string();
-            continue;
-          }
           case 6: {
             if (tag !== 50) {
               break;
@@ -2930,6 +3052,14 @@ export const SearchDocumentsRequest: MessageFns<SearchDocumentsRequest> = {
             if (entry7.value !== undefined) {
               message.metadataFilter[entry7.key] = entry7.value;
             }
+            continue;
+          }
+          case 8: {
+            if (tag !== 66) {
+              break;
+            }
+
+            message.embeddingModel = reader.string();
             continue;
           }
         }
@@ -2957,16 +3087,6 @@ export const SearchDocumentsRequest: MessageFns<SearchDocumentsRequest> = {
         : isSet(object.top_k)
         ? globalThis.Number(object.top_k)
         : 0,
-      embeddingsModel: isSet(object.embeddingsModel)
-        ? globalThis.String(object.embeddingsModel)
-        : isSet(object.embeddings_model)
-        ? globalThis.String(object.embeddings_model)
-        : "",
-      embeddingsClient: isSet(object.embeddingsClient)
-        ? globalThis.String(object.embeddingsClient)
-        : isSet(object.embeddings_client)
-        ? globalThis.String(object.embeddings_client)
-        : "",
       documentIds: globalThis.Array.isArray(object?.documentIds)
         ? object.documentIds.map((e: any) => globalThis.String(e))
         : globalThis.Array.isArray(object?.document_ids)
@@ -2999,6 +3119,11 @@ export const SearchDocumentsRequest: MessageFns<SearchDocumentsRequest> = {
           {},
         )
         : {},
+      embeddingModel: isSet(object.embeddingModel)
+        ? globalThis.String(object.embeddingModel)
+        : isSet(object.embedding_model)
+        ? globalThis.String(object.embedding_model)
+        : "",
     };
   },
 
@@ -3013,12 +3138,6 @@ export const SearchDocumentsRequest: MessageFns<SearchDocumentsRequest> = {
     if (message.topK !== 0) {
       obj.topK = Math.round(message.topK);
     }
-    if (message.embeddingsModel !== "") {
-      obj.embeddingsModel = message.embeddingsModel;
-    }
-    if (message.embeddingsClient !== "") {
-      obj.embeddingsClient = message.embeddingsClient;
-    }
     if (message.documentIds?.length) {
       obj.documentIds = message.documentIds;
     }
@@ -3031,6 +3150,9 @@ export const SearchDocumentsRequest: MessageFns<SearchDocumentsRequest> = {
         });
       }
     }
+    if (message.embeddingModel !== "") {
+      obj.embeddingModel = message.embeddingModel;
+    }
     return obj;
   },
 
@@ -3042,8 +3164,6 @@ export const SearchDocumentsRequest: MessageFns<SearchDocumentsRequest> = {
     message.indexName = object.indexName ?? "";
     message.query = object.query ?? "";
     message.topK = object.topK ?? 0;
-    message.embeddingsModel = object.embeddingsModel ?? "";
-    message.embeddingsClient = object.embeddingsClient ?? "";
     message.documentIds = object.documentIds?.map((e) => e) || [];
     message.metadataFilter = (globalThis.Object.entries(object.metadataFilter ?? {}) as [string, string][]).reduce(
       (acc: { [key: string]: string }, [key, value]: [string, string]) => {
@@ -3054,6 +3174,7 @@ export const SearchDocumentsRequest: MessageFns<SearchDocumentsRequest> = {
       },
       {},
     );
+    message.embeddingModel = object.embeddingModel ?? "";
     return message;
   },
 };
@@ -3544,6 +3665,17 @@ export const DocumentServerService = {
       Buffer.from(IngestDocumentJobResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): IngestDocumentJobResponse => IngestDocumentJobResponse.decode(value),
   },
+  ingestStoredDocument: {
+    path: "/gogi.v1.DocumentServer/IngestStoredDocument" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: IngestStoredDocumentRequest): Buffer =>
+      Buffer.from(IngestStoredDocumentRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): IngestStoredDocumentRequest => IngestStoredDocumentRequest.decode(value),
+    responseSerialize: (value: IngestDocumentJobResponse): Buffer =>
+      Buffer.from(IngestDocumentJobResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): IngestDocumentJobResponse => IngestDocumentJobResponse.decode(value),
+  },
   getDocumentIngestJob: {
     path: "/gogi.v1.DocumentServer/GetDocumentIngestJob" as const,
     requestStream: false as const,
@@ -3607,6 +3739,7 @@ export interface DocumentServerServer extends UntypedServiceImplementation {
   deleteDocument: handleUnaryCall<DeleteDocumentRequest, DeleteDocumentResponse>;
   ingestDocument: handleUnaryCall<IngestDocumentRequest, IngestDocumentJobResponse>;
   uploadDocument: handleClientStreamingCall<UploadDocumentRequest, IngestDocumentJobResponse>;
+  ingestStoredDocument: handleUnaryCall<IngestStoredDocumentRequest, IngestDocumentJobResponse>;
   getDocumentIngestJob: handleUnaryCall<GetIngestDocumentJobRequest, IngestDocumentJobResponse>;
   searchDocuments: handleUnaryCall<SearchDocumentsRequest, SearchDocumentsResponse>;
   listDocumentSections: handleUnaryCall<ListDocumentSectionsRequest, ListDocumentSectionsResponse>;
@@ -3691,6 +3824,21 @@ export interface DocumentServerClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: IngestDocumentJobResponse) => void,
   ): ClientWritableStream<UploadDocumentRequest>;
+  ingestStoredDocument(
+    request: IngestStoredDocumentRequest,
+    callback: (error: ServiceError | null, response: IngestDocumentJobResponse) => void,
+  ): ClientUnaryCall;
+  ingestStoredDocument(
+    request: IngestStoredDocumentRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: IngestDocumentJobResponse) => void,
+  ): ClientUnaryCall;
+  ingestStoredDocument(
+    request: IngestStoredDocumentRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: IngestDocumentJobResponse) => void,
+  ): ClientUnaryCall;
   getDocumentIngestJob(
     request: GetIngestDocumentJobRequest,
     callback: (error: ServiceError | null, response: IngestDocumentJobResponse) => void,

@@ -216,6 +216,65 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
+/**
+ * A text embedding model: one gogi runs, e.g. "bge-small-en-v1.5", OpenAI's
+ * "text-embedding-3-small", or one the application registered by its URL
+ */
+export interface EmbeddingModel {
+  name: string;
+  /** the length of its vectors */
+  dimensions: number;
+  /** the most tokens it reads of a text; a document's chunks for it are no longer */
+  maxInputTokens: number;
+  /** where the application's own model is; empty for the models gogi provides */
+  url: string;
+  /** the credential the model is called with, e.g. "openai"; empty if it needs none */
+  credentialRef: string;
+  /**
+   * whether the application can use it now: false for OpenAI's model until the application
+   * has stored its key as the credential "openai"
+   */
+  available: boolean;
+}
+
+export interface RegisterEmbeddingModelRequest {
+  /** 2 to 63 lowercase letters, digits and dashes, starting with a letter */
+  name: string;
+  /**
+   * the base URL of an OpenAI-compatible embeddings endpoint, e.g. "https://models.example.org/v1";
+   * gogi posts to <url>/embeddings
+   */
+  url: string;
+  /** the model's name at the endpoint, if not the name it is registered with */
+  servedName: string;
+  /** names a credential the application stored, sent as a bearer token; empty if none is needed */
+  credentialRef: string;
+  /** the most tokens the model reads of a text; 512 if not given */
+  maxInputTokens: number;
+}
+
+export interface ListEmbeddingModelsRequest {
+}
+
+export interface ListEmbeddingModelsResponse {
+  models: EmbeddingModel[];
+}
+
+export interface EmbedRequest {
+  model: string;
+  inputs: string[];
+}
+
+export interface Embedding {
+  values: number[];
+}
+
+export interface EmbedResponse {
+  model: string;
+  /** one for each input, in the same order */
+  embeddings: Embedding[];
+}
+
 function createBaseLLMRunRequestConfig(): LLMRunRequestConfig {
   return {
     model: "",
@@ -2910,6 +2969,684 @@ export const TokenUsage: MessageFns<TokenUsage> = {
   },
 };
 
+function createBaseEmbeddingModel(): EmbeddingModel {
+  return { name: "", dimensions: 0, maxInputTokens: 0, url: "", credentialRef: "", available: false };
+}
+
+export const EmbeddingModel: MessageFns<EmbeddingModel> = {
+  encode(message: EmbeddingModel, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.dimensions !== 0) {
+      writer.uint32(16).int32(message.dimensions);
+    }
+    if (message.maxInputTokens !== 0) {
+      writer.uint32(24).int32(message.maxInputTokens);
+    }
+    if (message.url !== "") {
+      writer.uint32(34).string(message.url);
+    }
+    if (message.credentialRef !== "") {
+      writer.uint32(42).string(message.credentialRef);
+    }
+    if (message.available !== false) {
+      writer.uint32(48).bool(message.available);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EmbeddingModel {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseEmbeddingModel();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 16) {
+              break;
+            }
+
+            message.dimensions = reader.int32();
+            continue;
+          }
+          case 3: {
+            if (tag !== 24) {
+              break;
+            }
+
+            message.maxInputTokens = reader.int32();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.url = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 42) {
+              break;
+            }
+
+            message.credentialRef = reader.string();
+            continue;
+          }
+          case 6: {
+            if (tag !== 48) {
+              break;
+            }
+
+            message.available = reader.bool();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): EmbeddingModel {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      dimensions: isSet(object.dimensions) ? globalThis.Number(object.dimensions) : 0,
+      maxInputTokens: isSet(object.maxInputTokens)
+        ? globalThis.Number(object.maxInputTokens)
+        : isSet(object.max_input_tokens)
+        ? globalThis.Number(object.max_input_tokens)
+        : 0,
+      url: isSet(object.url) ? globalThis.String(object.url) : "",
+      credentialRef: isSet(object.credentialRef)
+        ? globalThis.String(object.credentialRef)
+        : isSet(object.credential_ref)
+        ? globalThis.String(object.credential_ref)
+        : "",
+      available: isSet(object.available) ? globalThis.Boolean(object.available) : false,
+    };
+  },
+
+  toJSON(message: EmbeddingModel): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.dimensions !== 0) {
+      obj.dimensions = Math.round(message.dimensions);
+    }
+    if (message.maxInputTokens !== 0) {
+      obj.maxInputTokens = Math.round(message.maxInputTokens);
+    }
+    if (message.url !== "") {
+      obj.url = message.url;
+    }
+    if (message.credentialRef !== "") {
+      obj.credentialRef = message.credentialRef;
+    }
+    if (message.available !== false) {
+      obj.available = message.available;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<EmbeddingModel>): EmbeddingModel {
+    return EmbeddingModel.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<EmbeddingModel>): EmbeddingModel {
+    const message = createBaseEmbeddingModel();
+    message.name = object.name ?? "";
+    message.dimensions = object.dimensions ?? 0;
+    message.maxInputTokens = object.maxInputTokens ?? 0;
+    message.url = object.url ?? "";
+    message.credentialRef = object.credentialRef ?? "";
+    message.available = object.available ?? false;
+    return message;
+  },
+};
+
+function createBaseRegisterEmbeddingModelRequest(): RegisterEmbeddingModelRequest {
+  return { name: "", url: "", servedName: "", credentialRef: "", maxInputTokens: 0 };
+}
+
+export const RegisterEmbeddingModelRequest: MessageFns<RegisterEmbeddingModelRequest> = {
+  encode(message: RegisterEmbeddingModelRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    if (message.url !== "") {
+      writer.uint32(18).string(message.url);
+    }
+    if (message.servedName !== "") {
+      writer.uint32(26).string(message.servedName);
+    }
+    if (message.credentialRef !== "") {
+      writer.uint32(34).string(message.credentialRef);
+    }
+    if (message.maxInputTokens !== 0) {
+      writer.uint32(40).int32(message.maxInputTokens);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): RegisterEmbeddingModelRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseRegisterEmbeddingModelRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.name = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.url = reader.string();
+            continue;
+          }
+          case 3: {
+            if (tag !== 26) {
+              break;
+            }
+
+            message.servedName = reader.string();
+            continue;
+          }
+          case 4: {
+            if (tag !== 34) {
+              break;
+            }
+
+            message.credentialRef = reader.string();
+            continue;
+          }
+          case 5: {
+            if (tag !== 40) {
+              break;
+            }
+
+            message.maxInputTokens = reader.int32();
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): RegisterEmbeddingModelRequest {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      url: isSet(object.url) ? globalThis.String(object.url) : "",
+      servedName: isSet(object.servedName)
+        ? globalThis.String(object.servedName)
+        : isSet(object.served_name)
+        ? globalThis.String(object.served_name)
+        : "",
+      credentialRef: isSet(object.credentialRef)
+        ? globalThis.String(object.credentialRef)
+        : isSet(object.credential_ref)
+        ? globalThis.String(object.credential_ref)
+        : "",
+      maxInputTokens: isSet(object.maxInputTokens)
+        ? globalThis.Number(object.maxInputTokens)
+        : isSet(object.max_input_tokens)
+        ? globalThis.Number(object.max_input_tokens)
+        : 0,
+    };
+  },
+
+  toJSON(message: RegisterEmbeddingModelRequest): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.url !== "") {
+      obj.url = message.url;
+    }
+    if (message.servedName !== "") {
+      obj.servedName = message.servedName;
+    }
+    if (message.credentialRef !== "") {
+      obj.credentialRef = message.credentialRef;
+    }
+    if (message.maxInputTokens !== 0) {
+      obj.maxInputTokens = Math.round(message.maxInputTokens);
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<RegisterEmbeddingModelRequest>): RegisterEmbeddingModelRequest {
+    return RegisterEmbeddingModelRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<RegisterEmbeddingModelRequest>): RegisterEmbeddingModelRequest {
+    const message = createBaseRegisterEmbeddingModelRequest();
+    message.name = object.name ?? "";
+    message.url = object.url ?? "";
+    message.servedName = object.servedName ?? "";
+    message.credentialRef = object.credentialRef ?? "";
+    message.maxInputTokens = object.maxInputTokens ?? 0;
+    return message;
+  },
+};
+
+function createBaseListEmbeddingModelsRequest(): ListEmbeddingModelsRequest {
+  return {};
+}
+
+export const ListEmbeddingModelsRequest: MessageFns<ListEmbeddingModelsRequest> = {
+  encode(_: ListEmbeddingModelsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListEmbeddingModelsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListEmbeddingModelsRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(_: any): ListEmbeddingModelsRequest {
+    return {};
+  },
+
+  toJSON(_: ListEmbeddingModelsRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListEmbeddingModelsRequest>): ListEmbeddingModelsRequest {
+    return ListEmbeddingModelsRequest.fromPartial(base ?? {});
+  },
+  fromPartial(_: DeepPartial<ListEmbeddingModelsRequest>): ListEmbeddingModelsRequest {
+    const message = createBaseListEmbeddingModelsRequest();
+    return message;
+  },
+};
+
+function createBaseListEmbeddingModelsResponse(): ListEmbeddingModelsResponse {
+  return { models: [] };
+}
+
+export const ListEmbeddingModelsResponse: MessageFns<ListEmbeddingModelsResponse> = {
+  encode(message: ListEmbeddingModelsResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.models) {
+      EmbeddingModel.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListEmbeddingModelsResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseListEmbeddingModelsResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.models.push(EmbeddingModel.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): ListEmbeddingModelsResponse {
+    return {
+      models: globalThis.Array.isArray(object?.models) ? object.models.map((e: any) => EmbeddingModel.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: ListEmbeddingModelsResponse): unknown {
+    const obj: any = {};
+    if (message.models?.length) {
+      obj.models = message.models.map((e) => EmbeddingModel.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<ListEmbeddingModelsResponse>): ListEmbeddingModelsResponse {
+    return ListEmbeddingModelsResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<ListEmbeddingModelsResponse>): ListEmbeddingModelsResponse {
+    const message = createBaseListEmbeddingModelsResponse();
+    message.models = object.models?.map((e) => EmbeddingModel.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseEmbedRequest(): EmbedRequest {
+  return { model: "", inputs: [] };
+}
+
+export const EmbedRequest: MessageFns<EmbedRequest> = {
+  encode(message: EmbedRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.model !== "") {
+      writer.uint32(10).string(message.model);
+    }
+    for (const v of message.inputs) {
+      writer.uint32(18).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EmbedRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseEmbedRequest();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.model = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.inputs.push(reader.string());
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): EmbedRequest {
+    return {
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
+      inputs: globalThis.Array.isArray(object?.inputs) ? object.inputs.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: EmbedRequest): unknown {
+    const obj: any = {};
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
+    if (message.inputs?.length) {
+      obj.inputs = message.inputs;
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<EmbedRequest>): EmbedRequest {
+    return EmbedRequest.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<EmbedRequest>): EmbedRequest {
+    const message = createBaseEmbedRequest();
+    message.model = object.model ?? "";
+    message.inputs = object.inputs?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseEmbedding(): Embedding {
+  return { values: [] };
+}
+
+export const Embedding: MessageFns<Embedding> = {
+  encode(message: Embedding, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.values.length !== 0) {
+      writer.uint32(10).fork();
+      for (const v of message.values) {
+        writer.float(v);
+      }
+      writer.join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Embedding {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseEmbedding();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag === 13) {
+              message.values.push(reader.float());
+
+              continue;
+            }
+
+            if (tag === 10) {
+              const end2 = reader.uint32() + reader.pos;
+              while (reader.pos < end2) {
+                message.values.push(reader.float());
+              }
+
+              continue;
+            }
+
+            break;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): Embedding {
+    return {
+      values: globalThis.Array.isArray(object?.values) ? object.values.map((e: any) => globalThis.Number(e)) : [],
+    };
+  },
+
+  toJSON(message: Embedding): unknown {
+    const obj: any = {};
+    if (message.values?.length) {
+      obj.values = message.values.map((e) => floatToJson(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<Embedding>): Embedding {
+    return Embedding.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<Embedding>): Embedding {
+    const message = createBaseEmbedding();
+    message.values = object.values?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseEmbedResponse(): EmbedResponse {
+  return { model: "", embeddings: [] };
+}
+
+export const EmbedResponse: MessageFns<EmbedResponse> = {
+  encode(message: EmbedResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.model !== "") {
+      writer.uint32(10).string(message.model);
+    }
+    for (const v of message.embeddings) {
+      Embedding.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EmbedResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const previousRecursionDepth = (reader as any).__tsProtoDecodeDepth ?? 0;
+    if (previousRecursionDepth >= 100) {
+      throw new globalThis.Error("protobuf decode recursion limit exceeded");
+    }
+    (reader as any).__tsProtoDecodeDepth = previousRecursionDepth + 1;
+    try {
+      const end = length === undefined ? reader.len : reader.pos + length;
+      const message = createBaseEmbedResponse();
+      while (reader.pos < end) {
+        const tag = reader.uint32();
+        switch (tag >>> 3) {
+          case 1: {
+            if (tag !== 10) {
+              break;
+            }
+
+            message.model = reader.string();
+            continue;
+          }
+          case 2: {
+            if (tag !== 18) {
+              break;
+            }
+
+            message.embeddings.push(Embedding.decode(reader, reader.uint32()));
+            continue;
+          }
+        }
+        if ((tag & 7) === 4 || tag === 0) {
+          break;
+        }
+        reader.skip(tag & 7);
+      }
+      return message;
+    } finally {
+      (reader as any).__tsProtoDecodeDepth = previousRecursionDepth;
+    }
+  },
+
+  fromJSON(object: any): EmbedResponse {
+    return {
+      model: isSet(object.model) ? globalThis.String(object.model) : "",
+      embeddings: globalThis.Array.isArray(object?.embeddings)
+        ? object.embeddings.map((e: any) => Embedding.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: EmbedResponse): unknown {
+    const obj: any = {};
+    if (message.model !== "") {
+      obj.model = message.model;
+    }
+    if (message.embeddings?.length) {
+      obj.embeddings = message.embeddings.map((e) => Embedding.toJSON(e));
+    }
+    return obj;
+  },
+
+  create(base?: DeepPartial<EmbedResponse>): EmbedResponse {
+    return EmbedResponse.fromPartial(base ?? {});
+  },
+  fromPartial(object: DeepPartial<EmbedResponse>): EmbedResponse {
+    const message = createBaseEmbedResponse();
+    message.model = object.model ?? "";
+    message.embeddings = object.embeddings?.map((e) => Embedding.fromPartial(e)) || [];
+    return message;
+  },
+};
+
 export type LLMModelServerService = typeof LLMModelServerService;
 export const LLMModelServerService = {
   /** Core inference */
@@ -3004,6 +3741,43 @@ export const LLMModelServerService = {
     responseSerialize: (value: LLMStatusResponse): Buffer => Buffer.from(LLMStatusResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): LLMStatusResponse => LLMStatusResponse.decode(value),
   },
+  /**
+   * Embedding models
+   * Register a text embedding model the application hosts behind an OpenAI-compatible
+   * embeddings endpoint; registering a name again replaces it
+   */
+  registerEmbeddingModel: {
+    path: "/gogi.v1.LLMModelServer/RegisterEmbeddingModel" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: RegisterEmbeddingModelRequest): Buffer =>
+      Buffer.from(RegisterEmbeddingModelRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): RegisterEmbeddingModelRequest => RegisterEmbeddingModelRequest.decode(value),
+    responseSerialize: (value: EmbeddingModel): Buffer => Buffer.from(EmbeddingModel.encode(value).finish()),
+    responseDeserialize: (value: Buffer): EmbeddingModel => EmbeddingModel.decode(value),
+  },
+  /** List the embedding models the application can use: those gogi runs, OpenAI's, and its own */
+  listEmbeddingModels: {
+    path: "/gogi.v1.LLMModelServer/ListEmbeddingModels" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListEmbeddingModelsRequest): Buffer =>
+      Buffer.from(ListEmbeddingModelsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListEmbeddingModelsRequest => ListEmbeddingModelsRequest.decode(value),
+    responseSerialize: (value: ListEmbeddingModelsResponse): Buffer =>
+      Buffer.from(ListEmbeddingModelsResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListEmbeddingModelsResponse => ListEmbeddingModelsResponse.decode(value),
+  },
+  /** Embed texts with an embedding model */
+  embed: {
+    path: "/gogi.v1.LLMModelServer/Embed" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: EmbedRequest): Buffer => Buffer.from(EmbedRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): EmbedRequest => EmbedRequest.decode(value),
+    responseSerialize: (value: EmbedResponse): Buffer => Buffer.from(EmbedResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): EmbedResponse => EmbedResponse.decode(value),
+  },
 } as const;
 
 export interface LLMModelServerServer extends UntypedServiceImplementation {
@@ -3028,6 +3802,16 @@ export interface LLMModelServerServer extends UntypedServiceImplementation {
   listRegisteredLlMs: handleUnaryCall<ListRegisteredLLMsRequest, ListRegisteredLLMsResponse>;
   /** Get the status of the LLM */
   getLlmStatus: handleUnaryCall<GetLLMStatusRequest, LLMStatusResponse>;
+  /**
+   * Embedding models
+   * Register a text embedding model the application hosts behind an OpenAI-compatible
+   * embeddings endpoint; registering a name again replaces it
+   */
+  registerEmbeddingModel: handleUnaryCall<RegisterEmbeddingModelRequest, EmbeddingModel>;
+  /** List the embedding models the application can use: those gogi runs, OpenAI's, and its own */
+  listEmbeddingModels: handleUnaryCall<ListEmbeddingModelsRequest, ListEmbeddingModelsResponse>;
+  /** Embed texts with an embedding model */
+  embed: handleUnaryCall<EmbedRequest, EmbedResponse>;
 }
 
 export interface LLMModelServerClient extends Client {
@@ -3154,6 +3938,58 @@ export interface LLMModelServerClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: LLMStatusResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Embedding models
+   * Register a text embedding model the application hosts behind an OpenAI-compatible
+   * embeddings endpoint; registering a name again replaces it
+   */
+  registerEmbeddingModel(
+    request: RegisterEmbeddingModelRequest,
+    callback: (error: ServiceError | null, response: EmbeddingModel) => void,
+  ): ClientUnaryCall;
+  registerEmbeddingModel(
+    request: RegisterEmbeddingModelRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: EmbeddingModel) => void,
+  ): ClientUnaryCall;
+  registerEmbeddingModel(
+    request: RegisterEmbeddingModelRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: EmbeddingModel) => void,
+  ): ClientUnaryCall;
+  /** List the embedding models the application can use: those gogi runs, OpenAI's, and its own */
+  listEmbeddingModels(
+    request: ListEmbeddingModelsRequest,
+    callback: (error: ServiceError | null, response: ListEmbeddingModelsResponse) => void,
+  ): ClientUnaryCall;
+  listEmbeddingModels(
+    request: ListEmbeddingModelsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListEmbeddingModelsResponse) => void,
+  ): ClientUnaryCall;
+  listEmbeddingModels(
+    request: ListEmbeddingModelsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListEmbeddingModelsResponse) => void,
+  ): ClientUnaryCall;
+  /** Embed texts with an embedding model */
+  embed(
+    request: EmbedRequest,
+    callback: (error: ServiceError | null, response: EmbedResponse) => void,
+  ): ClientUnaryCall;
+  embed(
+    request: EmbedRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: EmbedResponse) => void,
+  ): ClientUnaryCall;
+  embed(
+    request: EmbedRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: EmbedResponse) => void,
   ): ClientUnaryCall;
 }
 

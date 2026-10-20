@@ -21,6 +21,7 @@ const document = {
   jobId: 'job-1',
   createdAt: '2026-10-17T10:00:00Z',
   sizeBytes: 42,
+  embeddingModels: ['bge-small-en-v1.5'],
 }
 
 describe('documents', () => {
@@ -46,11 +47,16 @@ describe('documents', () => {
       content,
       contentType: 'text/markdown',
       metadata: { subject: 'numerical-methods' },
-      storeOnly: false,
+      embeddingModels: ['bge-small-en-v1.5', 'all-MiniLM-L6-v2'],
     })
 
     expect(job).toMatchObject({ jobId: 'job-1', status: 'PENDING' })
-    expect(received[0].info).toMatchObject({ indexName: 'maria--aeronautics', filename: 'fem-notes.md', metadata: { subject: 'numerical-methods' } })
+    expect(received[0].info).toMatchObject({
+      indexName: 'maria--aeronautics',
+      filename: 'fem-notes.md',
+      metadata: { subject: 'numerical-methods' },
+      embeddingModels: ['bge-small-en-v1.5', 'all-MiniLM-L6-v2'],
+    })
     const chunks = received.slice(1).map((part) => part.chunk!)
     expect(chunks.every((chunk) => chunk.length <= UPLOAD_CHUNK_BYTES)).toBe(true)
     expect(Buffer.concat(chunks).equals(content)).toBe(true)
@@ -70,7 +76,7 @@ describe('documents', () => {
     const [found] = await gogi.documents.list('maria--aeronautics', { subject: 'numerical-methods' })
 
     expect(filter).toEqual({ subject: 'numerical-methods' })
-    expect(found).toMatchObject({ documentId: 'fem-notes', status: 'COMPLETED', sizeBytes: 42 })
+    expect(found).toMatchObject({ documentId: 'fem-notes', status: 'COMPLETED', sizeBytes: 42, embeddingModels: ['bge-small-en-v1.5'] })
     expect(found.createdAt).toEqual(new Date('2026-10-17T10:00:00Z'))
   })
 
@@ -122,5 +128,38 @@ describe('documents', () => {
     const gogi = await gateway.start()
 
     expect(await gogi.documents.delete('maria--aeronautics', 'missing')).toBe(false)
+  })
+
+  it('ingests a stored document later, with the models named', async () => {
+    let request: unknown
+    gateway = new FakeGateway().add(DocumentServerService, {
+      ingestStoredDocument: (call: { request: unknown }, callback: (...a: unknown[]) => void) => {
+        request = call.request
+        callback(null, { jobId: 'job-2', indexName: 'maria--aeronautics', documentId: 'lecture-3', filename: '', status: 'PENDING', progress: 0, errorMessage: '' })
+      },
+    })
+    const gogi = await gateway.start()
+
+    const job = await gogi.documents.ingestStored({ indexName: 'maria--aeronautics', documentId: 'lecture-3', embeddingModels: ['all-MiniLM-L6-v2'] })
+
+    expect(job).toMatchObject({ jobId: 'job-2', status: 'PENDING' })
+    expect(request).toMatchObject({ indexName: 'maria--aeronautics', documentId: 'lecture-3', embeddingModels: ['all-MiniLM-L6-v2'] })
+    expect(gateway.routes).toEqual(['documents'])
+  })
+
+  it('searches with the embedding model named', async () => {
+    let request: unknown
+    gateway = new FakeGateway().add(DocumentServerService, {
+      searchDocuments: (call: { request: unknown }, callback: (...a: unknown[]) => void) => {
+        request = call.request
+        callback(null, { chunks: [{ chunkId: 'c-1', documentId: 'fem-notes', indexName: 'maria--aeronautics', content: 'shape', score: 0.9, metadata: {} }] })
+      },
+    })
+    const gogi = await gateway.start()
+
+    const chunks = await gogi.documents.search({ indexName: 'maria--aeronautics', query: 'shape functions', embeddingModel: 'bge-small-en-v1.5' })
+
+    expect(chunks.map((chunk) => chunk.chunkId)).toEqual(['c-1'])
+    expect(request).toMatchObject({ query: 'shape functions', embeddingModel: 'bge-small-en-v1.5', topK: 5 })
   })
 })

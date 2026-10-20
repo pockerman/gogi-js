@@ -7,8 +7,8 @@ const SERVICE = 'llms'
 export type Role = 'system' | 'user' | 'assistant' | 'tool'
 
 /**
- * An image for a model: its bytes, or a document of the platform's (e.g. a photo uploaded with storeOnly), which
- * the platform reads itself, so a large image needn't travel in the request. The media type (image/jpeg,
+ * An image for a model: its bytes, or a document of the platform's (e.g. a photo uploaded without embedding
+ * models), which the platform reads itself, so a large image needn't travel in the request. The media type (image/jpeg,
  * image/png, image/gif or image/webp) is worked out from the image if it isn't given.
  */
 export type Image =
