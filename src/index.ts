@@ -11,10 +11,12 @@ export {
   type DocumentSection,
   type IngestJob,
   type IngestRequest,
+  type IngestStoredRequest,
   type JobStatus,
   type SearchRequest,
   type SectionText,
 } from './clients/documents'
+export { BGE_SMALL, MINILM, OPENAI_SMALL, type EmbeddingModel, type HostedModel } from './clients/embeddings'
 export { userWithImages } from './clients/models'
 export type {
   ContentPart,

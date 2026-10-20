@@ -1,5 +1,6 @@
 import { CredentialsClient } from './clients/credentials'
 import { DocumentsClient } from './clients/documents'
+import { EmbeddingsClient } from './clients/embeddings'
 import { HealthClient } from './clients/health'
 import { IndexesClient } from './clients/indexes'
 import { ModelsClient } from './clients/models'
@@ -33,6 +34,11 @@ export class Gogi {
 
   get documents(): DocumentsClient {
     return this.client('documents', () => new DocumentsClient(this.connection))
+  }
+
+  /** The embedding models documents are ingested and searched with, and the application's own. */
+  get embeddings(): EmbeddingsClient {
+    return this.client('embeddings', () => new EmbeddingsClient(this.connection))
   }
 
   get models(): ModelsClient {

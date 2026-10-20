@@ -27,6 +27,9 @@ export type DocumentInfo = {
   /** the job that ingested its current content; changes when the content is replaced */
   jobId: string
   sizeBytes: number
+  /** the models that have embedded it: a search with one of them can find it */
+  embeddingModels: string[]
+  /** its chunks, of every model */
   chunkCount: number
   pageCount: number
   wordCount: number
@@ -41,14 +44,24 @@ export type IngestRequest = {
   metadata?: Record<string, string>
   /** chosen by the platform if not given */
   documentId?: string
+  /**
+   * the models that embed its chunks, each into a collection of its own, e.g. ['bge-small-en-v1.5']; with none the
+   * document is only stored, e.g. a video, and can be ingested later with ingestStored
+   */
+  embeddingModels?: string[]
   chunkStrategy?: string
-  embeddingsModel?: string
-  embeddingsClient?: string
   batchSize?: number
-  /** keep and register the file without ingesting it, e.g. a video */
-  storeOnly?: boolean
   /** replace the content of the existing document of documentId, e.g. after it was edited */
   replace?: boolean
+}
+
+export type IngestStoredRequest = {
+  indexName: string
+  documentId: string
+  /** one or more */
+  embeddingModels: string[]
+  chunkStrategy?: string
+  batchSize?: number
 }
 
 export type IngestJob = {
@@ -65,8 +78,8 @@ export type SearchRequest = {
   indexName: string
   query: string
   topK?: number
-  embeddingsModel: string
-  embeddingsClient: string
+  /** one of the models the documents were ingested with; only what it embedded is searched */
+  embeddingModel: string
   documentIds?: string[]
   /** only chunks whose metadata has all of these keys and values */
   metadataFilter?: Record<string, string>
@@ -104,6 +117,7 @@ function toDocument(document: DocumentMetadata): DocumentInfo {
     status: document.status as JobStatus | '',
     jobId: document.jobId,
     sizeBytes: document.sizeBytes,
+    embeddingModels: [...document.embeddingModels],
     chunkCount: document.chunkCount,
     pageCount: document.pageCount,
     wordCount: document.wordCount,
@@ -134,8 +148,9 @@ export class DocumentsClient {
   }
 
   /**
-   * Ingests a document: the platform stores it and processes it in the background, chunking and embedding it.
-   * The content is streamed in parts, so documents larger than a gRPC message can be ingested, up to the
+   * Uploads a document to an index and ingests it with the embedding models the request names: the platform
+   * stores it and, in the background, chunks it for each model and embeds the chunks. With no models it is only
+   * stored. A model gogi neither provides nor has registered for the application is refused. The content is streamed in parts, so documents larger than a gRPC message can be ingested, up to the
    * platform's upload limit. Follow the returned job with getIngestJob or waitForIngestion.
    */
   async ingest(request: IngestRequest): Promise<IngestJob> {
@@ -147,10 +162,8 @@ export class DocumentsClient {
       metadata: request.metadata ?? {},
       documentId: request.documentId ?? '',
       chunkStrategy: request.chunkStrategy ?? '',
-      embeddingsModel: request.embeddingsModel ?? '',
-      embeddingsClient: request.embeddingsClient ?? '',
+      embeddingModels: request.embeddingModels ?? [],
       batchSize: request.batchSize ?? 0,
-      storeOnly: request.storeOnly ?? false,
       replace: request.replace ?? false,
     }
     const content = Buffer.from(request.content)
@@ -168,6 +181,29 @@ export class DocumentsClient {
     }).catch((error) => {
       throw toGogiError(error)
     })
+    return toJob(job)
+  }
+
+  /**
+   * Chunks a document the index already has and embeds it with the models, e.g. one stored without models, or one to
+   * embed with another model too. Ingesting again with a model replaces what that model embedded of it; a running
+   * ingestion of the document is stopped.
+   */
+  async ingestStored(request: IngestStoredRequest): Promise<IngestJob> {
+    const ingest = promised(this.stub.ingestStoredDocument, this.stub)
+    const job = await this.connection.unary(SERVICE, (m, o) =>
+      ingest(
+        {
+          indexName: request.indexName,
+          documentId: request.documentId,
+          embeddingModels: request.embeddingModels,
+          chunkStrategy: request.chunkStrategy ?? '',
+          batchSize: request.batchSize ?? 0,
+        },
+        m,
+        o,
+      ),
+    )
     return toJob(job)
   }
 
@@ -218,7 +254,7 @@ export class DocumentsClient {
     }
   }
 
-  /** The chunks most similar to the query. */
+  /** The chunks most similar to the query, of the documents the request's embedding model embedded. */
   async search(request: SearchRequest): Promise<Chunk[]> {
     const search = promised(this.stub.searchDocuments, this.stub)
     const response = await this.connection.unary(SERVICE, (m, o) =>
@@ -227,8 +263,7 @@ export class DocumentsClient {
           indexName: request.indexName,
           query: request.query,
           topK: request.topK ?? 5,
-          embeddingsModel: request.embeddingsModel,
-          embeddingsClient: request.embeddingsClient,
+          embeddingModel: request.embeddingModel,
           documentIds: request.documentIds ?? [],
           metadataFilter: request.metadataFilter ?? {},
         },
